@@ -1,6 +1,7 @@
 import codecs
 from lxml import etree
 from lxml.cssselect import CSSSelector
+from math import ceil
 import os
 import re
 import urllib
@@ -219,6 +220,7 @@ class Premailer(object):
 
         first_time = []
         first_time_styles = []
+        inlined_items = set()
         for __, selector, style in rules:
             new_selector = selector
             class_ = ''
@@ -241,6 +243,7 @@ class Premailer(object):
                 else:
                     new_style = merge_styles(old_style, style, class_)
                 item.attrib['style'] = new_style
+                inlined_items.add(item)
                 self._style_to_basic_html_attributes(item, new_style,
                                                      force=True)
 
@@ -252,7 +255,83 @@ class Premailer(object):
             new_style = merge_styles(old_style, inline_style, class_)
             item.attrib['style'] = new_style
             self._style_to_basic_html_attributes(item, new_style, force=True)
-
+        
+        # Apply extensions.
+        for item in inlined_items:
+            # VML roundrect - implements http://emailbtn.net
+            props = [p.strip() for p in item.attrib['style'].split(';')]
+            roundrect_props = dict((k[21:].strip(), v.strip()) for k,v in 
+                [p.split(':', 1) for p in props if p.startswith('-premailer-roundrect-')])
+            
+            if roundrect_props:
+                xml = []
+                
+                # build the roundrect's style
+                height = roundrect_props.get('height')
+                style = [
+                    ('v-text-anchor', 'middle'),
+                    ('width', roundrect_props['width']) if 'width' in roundrect_props else None,
+                    ('height', roundrect_props['height']) if height is not None else None,
+                    ]
+                
+                # convert the arcsize property
+                arcsize = None
+                if 'arcsize' in roundrect_props:
+                    # convert from px to % if needed
+                    arcsize = roundrect_props['arcsize']
+                    if arcsize.endswith('px') and height is not None: 
+                        arcsize = str(ceil(float(arcsize[:-2]) / 
+                            float(height[:-2] if height.endswith('px') 
+                                else height) * 100.0)) + '%'
+                
+                # build the roundrect's attributes
+                attrs = [
+                    ('xmlns:v', 'urn:schemas-microsoft-com:vml'),
+                    ('xmlns:w', 'urn:schemas-microsoft-com:office:word'),
+                    ('href', item.attrib['href']) if 'href' in item.attrib else None,
+                    ('style', ';'.join(':'.join(p) for p in style if p is not None)),
+                    ('arcsize', arcsize) if arcsize is not None else None,
+                    ('strokecolor', roundrect_props['strokecolor']) 
+                        if 'strokecolor' in roundrect_props else None,
+                    ('fillcolor', roundrect_props['fillcolor'])
+                        if 'fillcolor' in roundrect_props else None,
+                    ]
+                
+                xml.append('<v:roundrect %s>' % ' '.join('%s="%s"' % a for a in attrs 
+                    if a is not None))
+                xml.append('<w:anchorlock/>')
+                
+                # build the center element's style
+                style = [
+                    (p, roundrect_props[p]) if p in roundrect_props else None
+                    for p in ['color', 'font-family', 'font-size', 'font-weight']]
+                
+                xml.append('<center style="%s">' % ';'.join(':'.join(p) for p in style 
+                    if p is not None))
+                xml.append(item.text)
+                xml.append('</center>')
+                xml.append('</v:roundrect>')
+                
+                # wrap the element in the XML and it's conditionals
+                
+                #div = etree.Element('div')
+                #item.addprevious(div)
+                #div.append(etree.Comment('[if mso]'))
+                #div.append(etree.XML(''.join(xml)))
+                #div.append(etree.Comment('[endif]'))
+                #div.append(etree.Comment('[if !mso]'))
+                #div.append(item)
+                #div.append(etree.Comment('[!endif]'))
+                
+                item.addprevious(etree.Comment('[if mso]'))
+                item.addprevious(etree.XML(''.join(xml)))
+                item.addprevious(etree.Comment('[endif]'))
+                item.addprevious(etree.Comment('[if !mso]'))
+                item.addnext(etree.Comment('[!endif]'))
+                
+                item.attrib['style'] = ';'.join(p for p in props 
+                    if not p.startswith('-premailer-roundrect-'))
+        
         if self.remove_classes:
             # now we can delete all 'class' attributes
             for item in page.xpath('//@class'):
@@ -277,6 +356,12 @@ class Premailer(object):
         out = etree.tostring(root, method="html", pretty_print=pretty_print)
         if self.strip_important:
             out = _importants.sub('', out)
+        
+        out = out.replace('<!--[if mso]-->', '<!--[if mso]>')
+        out = out.replace('<!--[endif]-->', '<![endif]-->')
+        out = out.replace('<!--[if !mso]-->', '<![if !mso]>')
+        out = out.replace('<!--[!endif]-->', '<![endif]>')
+        
         return out
 
     def _style_to_basic_html_attributes(self, element, style_content,
