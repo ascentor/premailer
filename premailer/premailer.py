@@ -103,7 +103,8 @@ class Premailer(object):
                  include_star_selectors=False,
                  remove_classes=True,
                  strip_important=True,
-                 external_styles=None):
+                 external_styles=None,
+                 method="html"):
         self.html = html
         self.base_url = base_url
         self.preserve_internal_links = preserve_internal_links
@@ -117,6 +118,7 @@ class Premailer(object):
             external_styles = [external_styles]
         self.external_styles = external_styles
         self.strip_important = strip_important
+        self.method = method
 
     def _parse_style_rules(self, css_body, ruleset_index):
         leftover = []
@@ -156,7 +158,7 @@ class Premailer(object):
 
         return rules, leftover
 
-    def transform(self, pretty_print=True, method="html"):
+    def transform(self, pretty_print=True):
         """change the self.html and return it with CSS turned into style
         attributes.
         """
@@ -276,7 +278,7 @@ class Premailer(object):
                     parent.attrib[attr] = urlparse.urljoin(self.base_url,
                         parent.attrib[attr].strip('/'))
 
-        out = etree.tostring(root, method=method, pretty_print=pretty_print)
+        out = etree.tostring(root, method=self.method, pretty_print=pretty_print)
         if self.strip_important:
             out = _importants.sub('', out)
         return out
