@@ -148,6 +148,21 @@ class Premailer(object):
                     continue
                 elif selector == '*' and not self.include_star_selectors:
                     continue
+                
+                # Gmail doesn't like box-shadow or text-shadow, so keep them in the style
+                # http://www.campaignmonitor.com/blog/post/3652/gmail-strips-out-inline-css
+                inline = []
+                style = []
+                
+                for k, v in [x.strip().split(':', 1) for x in bulk.split(';') if x.strip()]:
+                    if 'box-shadow' in k or 'text-shadow' in k:
+                        style.append('%s:%s' % (k, v))
+                    else:
+                        inline.append('%s:%s' % (k, v))
+                
+                if style:
+                    leftover.append((selector, ';'.join(style)))
+                    bulk = ';'.join(inline)                
 
                 # Crudely calculate specificity
                 id_count = selector.count('#')
