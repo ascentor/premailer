@@ -76,6 +76,13 @@ def merge_styles(old, new, class_=''):
         return ' '.join(x for x in all if x != '{}')
 
 
+def make_important(bulk):
+    """makes every property in a string !important.
+    """
+    return ';'.join('%s !important' % p if not p.endswith('!important') else p
+                    for p in bulk.split(';'))
+
+
 _css_comments = re.compile(r'/\*.*?\*/', re.MULTILINE | re.DOTALL)
 _regex = re.compile('((.*?){(.*?)})', re.DOTALL | re.M)
 _semicolon_regex = re.compile(';(\s+)')
@@ -217,7 +224,7 @@ class Premailer(object):
                     style = etree.Element('style')
                     style.attrib['type'] = 'text/css'
                 
-                style.text = '\n'.join(['%s {%s}' % (k, v) for
+                style.text = '\n'.join(['%s {%s}' % (k, make_important(v)) for
                                         (k, v) in these_leftover])
                 
                 if not is_style:
