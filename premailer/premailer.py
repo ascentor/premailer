@@ -104,6 +104,7 @@ class Premailer(object):
                  remove_classes=True,
                  strip_important=True,
                  external_styles=None,
+                 base_path=None,
                  method="html"):
         self.html = html
         self.base_url = base_url
@@ -118,6 +119,7 @@ class Premailer(object):
             external_styles = [external_styles]
         self.external_styles = external_styles
         self.strip_important = strip_important
+        self.base_path = base_path
         self.method = method
 
     def _parse_style_rules(self, css_body, ruleset_index):
@@ -183,27 +185,60 @@ class Premailer(object):
         ##
 
         rules = []
-
-        for index, style in enumerate(CSSSelector('style')(page)):
+                
+        for index, element in enumerate(CSSSelector('style,link[rel~=stylesheet]')(page)):
             # If we have a media attribute whose value is anything other than
             # 'screen', ignore the ruleset.
-            media = style.attrib.get('media')
+            media = element.attrib.get('media')
             if media and media != 'screen':
                 continue
-
-            these_rules, these_leftover = self._parse_style_rules(style.text, index)
+            
+            is_style = element.tag == 'style'
+            if is_style:
+                css_body = element.text
+            else:
+                href = element.attrib.get('href')
+                if not href:
+                    continue
+                
+                if href.startswith('http://') or href.startswith('https://'):
+                    css_body = urllib.urlopen(href).read()
+                else:
+                    stylefile = os.path.join(self.base_path or '', href)
+                    if os.path.exists(stylefile):
+                        try:
+                            f = codecs.open(stylefile)
+                            css_body = f.read()
+                        finally:
+                            f.close()
+                    else:
+                        raise ValueError(u"Could not find external style: %s" %
+                                         stylefile)                
+            
+            these_rules, these_leftover = self._parse_style_rules(css_body, index)
             rules.extend(these_rules)
-
-            parent_of_style = style.getparent()
+            
+            parent_of_element = element.getparent()
             if these_leftover:
+                if is_style:
+                    style = element
+                else:
+                    style = etree.Element('style')
+                    style.attrib['type'] = 'text/css'
+                
                 style.text = '\n'.join(['%s {%s}' % (k, make_important(v)) for
                                         (k, v) in these_leftover])
-            elif not self.keep_style_tags:
-                parent_of_style.remove(style)
+                
+                if not is_style:
+                    element.addprevious(style)
+                    parent_of_element.remove(element)
+                
+            elif not self.keep_style_tags or not is_style:
+                parent_of_element.remove(element)
 
         if self.external_styles:
             for stylefile in self.external_styles:
-                if stylefile.startswith('http://'):
+                if stylefile.startswith('http://') or stylefile.startswith('https://'):
                     css_body = urllib.urlopen(stylefile).read()
                 elif os.path.exists(stylefile):
                     try:
