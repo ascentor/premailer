@@ -1255,7 +1255,8 @@ def test_external_stylesheet():
     </body>
     </html>"""
 
-    p = Premailer(html)
+    p = Premailer(html,
+        strip_important=False)
     result_html = p.transform()
 
     whitespace_between_tags = re.compile('>\s*<',)
