@@ -1170,3 +1170,53 @@ def test_ignore_style_elements_with_media_attribute():
     result_html = whitespace_between_tags.sub('><', result_html).strip()
 
     eq_(expect_html, result_html)
+
+
+def test_external_stylesheet():
+    """test an external stylesheet"""
+    if not etree:
+        # can't test it
+        return
+
+    html = """<html>
+    <head>
+    <title>Title</title>
+    <style type="text/css">
+    h1 { color:red; }
+    h3 { color:yellow; }
+    </style>
+    <link href="test-external.css" rel="stylesheet" type="text/css">
+    <style type="text/css">
+    h1 { color:orange; }
+    </style>
+    </head>
+    <body>
+    <h1>Hello</h1>
+    <h2>World</h2>
+    <h3>Test</h3>
+    <a href="#">Link</a>
+    </body>
+    </html>"""
+
+    expect_html = """<html>
+    <head>
+    <title>Title</title>
+    <style type="text/css">a:hover {color:purple}</style>
+    </head>
+    <body>
+    <h1 style="color:orange">Hello</h1>
+    <h2 style="color:green">World</h2>
+    <h3 style="color:yellow">Test</h3>
+    <a href="#" style="color:pink">Link</a>
+    </body>
+    </html>"""
+
+    p = Premailer(html)
+    result_html = p.transform()
+
+    whitespace_between_tags = re.compile('>\s*<',)
+
+    expect_html = whitespace_between_tags.sub('><', expect_html).strip()
+    result_html = whitespace_between_tags.sub('><', result_html).strip()
+
+    eq_(expect_html, result_html)
