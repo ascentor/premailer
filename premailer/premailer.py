@@ -88,6 +88,7 @@ _regex = re.compile('((.*?){(.*?)})', re.DOTALL | re.M)
 _semicolon_regex = re.compile(';(\s+)')
 _colon_regex = re.compile(':(\s+)')
 _element_selector_regex = re.compile(r'(^|\s)\w')
+_cdata_regex = re.compile(r'\<\!\[CDATA\[(.*?)\]\]\>', re.DOTALL)
 _importants = re.compile('\s*!important')
 # These selectors don't apply to all elements. Rather, they specify
 # which elements to apply to.
@@ -228,6 +229,8 @@ class Premailer(object):
                 
                 style.text = '\n'.join(['%s {%s}' % (k, make_important(v)) for
                                         (k, v) in these_leftover])
+                if self.method == 'xml':
+                    style.text = etree.CDATA(style.text)
                 
                 if not is_style:
                     element.addprevious(style)
@@ -314,6 +317,8 @@ class Premailer(object):
                         parent.attrib[attr].strip('/'))
 
         out = etree.tostring(root, method=self.method, pretty_print=pretty_print)
+        if self.method == 'xml':
+            out = _cdata_regex.sub(lambda m: '/*<![CDATA[*/%s/*]]>*/' % m.group(1), out)
         if self.strip_important:
             out = _importants.sub('', out)
         return out
