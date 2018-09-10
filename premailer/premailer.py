@@ -290,7 +290,7 @@ class Premailer(object):
 
             sel = CSSSelector(selector)
             for item in sel(page):
-                old_style = item.attrib.get('style', '')
+                old_style = item.attrib.get('style', '').replace('&quot;', '"') # WORKAROUND for bad data
                 if not item in first_time:
                     new_style = merge_styles(old_style, style, class_)
                     first_time.append(item)
@@ -303,7 +303,7 @@ class Premailer(object):
 
         # Re-apply initial inline styles.
         for item, inline_style in first_time_styles:
-            old_style = item.attrib.get('style', '')
+            old_style = item.attrib.get('style', '').replace('&quot;', '"') # WORKAROUND for bad data
             if not inline_style:
                 continue
             new_style = merge_styles(old_style, inline_style, class_)
